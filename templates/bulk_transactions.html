@@ -1,0 +1,472 @@
+{% extends "base.html" %}
+
+{% block title %}المعاملات المجمعة - نظام إدارة الحسابات البنكية{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-9">
+        <!-- Bulk Transaction Entry Form -->
+        <div class="transaction-form">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h4 class="mb-0">
+                    <i class="fas fa-list-alt me-2"></i>
+                    إدخال المعاملات المجمعة
+                </h4>
+                <a href="{{ url_for('transactions') }}" class="btn btn-outline-primary">
+                    <i class="fas fa-exchange-alt me-1"></i>
+                    الإدخال المفرد
+                </a>
+            </div>
+            
+            <!-- Header Controls -->
+            <div class="row mb-4">
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">الحساب البنكي *</label>
+                    <select class="form-select" id="bankAccount" required>
+                        <option value="">اختر الحساب البنكي</option>
+                        {% for account in bank_accounts %}
+                            <option value="{{ account.id }}">{{ account.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">تاريخ المعاملات *</label>
+                    <input type="date" class="form-control" id="transactionDate" required>
+                </div>
+                
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">إجمالي المعاملات</label>
+                    <div class="form-control bg-light" id="totalTransactions">0 معاملة</div>
+                </div>
+            </div>
+            
+            <hr>
+            
+            <!-- Transaction Instructions -->
+            <div class="alert alert-info mb-4">
+                <i class="fas fa-info-circle me-2"></i>
+                <strong>تعليمات:</strong>
+                أدخل المبالغ الموجبة للدائن (وارد) والمبالغ السالبة للمدين (صادر).
+                مثال: 500 للوارد، -300 للصادر
+            </div>
+            
+            <!-- Transactions Table -->
+            <div class="table-responsive">
+                <table class="table table-striped" id="transactionsTable">
+                    <thead class="table-primary">
+                        <tr>
+                            <th width="5%">#</th>
+                            <th width="25%">المبلغ (د.أ) *</th>
+                            <th width="40%">الحساب المقابل *</th>
+                            <th width="20%">النوع</th>
+                            <th width="10%">العمليات</th>
+                        </tr>
+                    </thead>
+                    <tbody id="transactionsBody">
+                        <!-- Initial row will be added by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Action Buttons -->
+            <div class="d-flex justify-content-between mt-4">
+                <div>
+                    <button type="button" class="btn btn-secondary" id="addRowBtn">
+                        <i class="fas fa-plus me-2"></i>
+                        إضافة صف جديد
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary ms-2" id="clearAllBtn">
+                        <i class="fas fa-trash me-2"></i>
+                        مسح الكل
+                    </button>
+                </div>
+                
+                <button type="button" class="btn btn-success btn-lg" id="saveAllBtn" disabled>
+                    <i class="fas fa-save me-2"></i>
+                    حفظ جميع المعاملات
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <!-- Current Balance Display -->
+        <div class="card balance-card mb-3" id="balanceCard" style="display: none;">
+            <div class="card-body text-center">
+                <h6>الرصيد الحالي</h6>
+                <h3 id="currentBalance">0.00 د.أ</h3>
+                <small id="accountName">-</small>
+            </div>
+        </div>
+        
+        <!-- Balance Preview -->
+        <div class="card mb-3" id="previewCard" style="display: none;">
+            <div class="card-header">
+                <h6 class="mb-0">
+                    <i class="fas fa-eye me-2"></i>
+                    معاينة الرصيد المتوقع
+                </h6>
+            </div>
+            <div class="card-body text-center">
+                <div class="mb-2">
+                    <small>الرصيد بعد المعاملات</small>
+                </div>
+                <h4 id="expectedBalance" class="text-primary">0.00 د.أ</h4>
+                <small class="text-muted">
+                    التغيير: <span id="balanceChange">0.00</span> د.أ
+                </small>
+            </div>
+        </div>
+        
+        <!-- Quick Account Filters -->
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0">
+                    <i class="fas fa-filter me-2"></i>
+                    فلترة الحسابات
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <button class="btn btn-sm btn-info" onclick="filterAccounts('client')">
+                        <i class="fas fa-user me-1"></i>
+                        العملاء
+                    </button>
+                    <button class="btn btn-sm btn-warning" onclick="filterAccounts('expense')">
+                        <i class="fas fa-shopping-cart me-1"></i>
+                        المصروفات
+                    </button>
+                    <button class="btn btn-sm btn-secondary" onclick="filterAccounts('supplier')">
+                        <i class="fas fa-truck me-1"></i>
+                        الموردين
+                    </button>
+                    <button class="btn btn-sm btn-outline-primary" onclick="filterAccounts('all')">
+                        <i class="fas fa-list me-1"></i>
+                        عرض الكل
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let rowCounter = 0;
+let correspondingAccounts = {{ corresponding_accounts_json|tojson }};
+
+$(document).ready(function() {
+    // Set today's date as default
+    const today = new Date().toISOString().split('T')[0];
+    $('#transactionDate').val(today);
+    
+    // Add initial row
+    addTransactionRow();
+    
+    // Event handlers
+    $('#bankAccount').change(function() {
+        const accountId = $(this).val();
+        if (accountId) {
+            loadAccountBalance(accountId);
+        } else {
+            $('#balanceCard, #previewCard').hide();
+        }
+        updateSaveButton();
+    });
+    
+    $('#transactionDate').change(updateSaveButton);
+    $('#addRowBtn').click(addTransactionRow);
+    $('#clearAllBtn').click(clearAllRows);
+    $('#saveAllBtn').click(saveAllTransactions);
+    
+    // Global event delegation for dynamic elements
+    $(document).on('input', '.amount-input', function() {
+        updateTransactionType($(this));
+        calculateTotals();
+        updateSaveButton();
+    });
+    
+    $(document).on('change', '.account-select', function() {
+        updateSaveButton();
+        // Focus next available amount field
+        const currentRow = $(this).closest('tr');
+        const nextRow = currentRow.next('tr');
+        if (nextRow.length === 0) {
+            addTransactionRow();
+        }
+        setTimeout(() => {
+            const nextAmount = nextRow.length ? nextRow.find('.amount-input') : $('#transactionsBody tr:last .amount-input');
+            if (nextAmount.length) nextAmount.focus();
+        }, 100);
+    });
+    
+    $(document).on('keydown', '.amount-input', function(e) {
+        if (e.key === 'Tab' || e.key === 'Enter') {
+            e.preventDefault();
+            const currentRow = $(this).closest('tr');
+            const accountSelect = currentRow.find('.account-select');
+            accountSelect.focus();
+        }
+    });
+    
+    $(document).on('keydown', '.account-select', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const currentRow = $(this).closest('tr');
+            const nextRow = currentRow.next('tr');
+            
+            // Add new row if this is the last row and has values
+            if (nextRow.length === 0 && $(this).val() && currentRow.find('.amount-input').val()) {
+                addTransactionRow();
+                setTimeout(() => {
+                    $('#transactionsBody tr:last .amount-input').focus();
+                }, 100);
+            } else if (nextRow.length > 0) {
+                nextRow.find('.amount-input').focus();
+            }
+        }
+    });
+});
+
+function addTransactionRow() {
+    rowCounter++;
+    const accountOptions = correspondingAccounts.map(acc => 
+        `<option value="${acc.id}" data-type="${acc.type}">${acc.name} (${acc.type})</option>`
+    ).join('');
+    
+    const row = `
+        <tr data-row="${rowCounter}">
+            <td class="text-center">${rowCounter}</td>
+            <td>
+                <input type="number" class="form-control amount-input" 
+                       placeholder="0.00" step="0.01" data-row="${rowCounter}">
+            </td>
+            <td>
+                <select class="form-select account-select" data-row="${rowCounter}">
+                    <option value="">اختر الحساب المقابل</option>
+                    ${accountOptions}
+                </select>
+            </td>
+            <td>
+                <span class="badge transaction-type" data-row="${rowCounter}">-</span>
+            </td>
+            <td class="text-center">
+                <button type="button" class="btn btn-sm btn-outline-danger delete-row" 
+                        onclick="deleteRow(${rowCounter})" ${rowCounter === 1 ? 'disabled' : ''}>
+                    <i class="fas fa-trash"></i>
+                </button>
+            </td>
+        </tr>
+    `;
+    
+    $('#transactionsBody').append(row);
+    calculateTotals();
+    
+    // Focus on the new amount input
+    setTimeout(() => {
+        $(`input[data-row="${rowCounter}"]`).focus();
+    }, 100);
+}
+
+function deleteRow(rowId) {
+    $(`tr[data-row="${rowId}"]`).remove();
+    
+    // Re-number rows
+    let counter = 1;
+    $('#transactionsBody tr').each(function() {
+        $(this).find('td:first').text(counter);
+        $(this).attr('data-row', counter);
+        $(this).find('.amount-input, .account-select, .transaction-type').attr('data-row', counter);
+        $(this).find('.delete-row').attr('onclick', `deleteRow(${counter})`);
+        counter++;
+    });
+    
+    rowCounter = counter - 1;
+    
+    // Ensure at least one row exists
+    if (rowCounter === 0) {
+        addTransactionRow();
+    }
+    
+    calculateTotals();
+    updateSaveButton();
+}
+
+function clearAllRows() {
+    if (confirm('هل أنت متأكد من مسح جميع الصفوف؟')) {
+        $('#transactionsBody').empty();
+        rowCounter = 0;
+        addTransactionRow();
+    }
+}
+
+function updateTransactionType($amountInput) {
+    const rowId = $amountInput.data('row');
+    const amount = parseFloat($amountInput.val()) || 0;
+    const $badge = $(`.transaction-type[data-row="${rowId}"]`);
+    
+    if (amount === 0) {
+        $badge.removeClass('bg-success bg-danger').addClass('bg-secondary').text('-');
+    } else if (amount > 0) {
+        $badge.removeClass('bg-danger bg-secondary').addClass('bg-success').text('وارد');
+    } else {
+        $badge.removeClass('bg-success bg-secondary').addClass('bg-danger').text('صادر');
+    }
+}
+
+function loadAccountBalance(accountId) {
+    $.get(`/api/account_balance/${accountId}`)
+        .done(function(data) {
+            $('#currentBalance').text(parseFloat(data.balance).toLocaleString('ar-JO', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            }) + ' د.أ');
+            $('#accountName').text(data.name);
+            $('#balanceCard').show();
+            $('#previewCard').show();
+            calculateTotals();
+        })
+        .fail(function() {
+            showMessage('خطأ في تحميل رصيد الحساب', 'error');
+        });
+}
+
+function calculateTotals() {
+    let totalTransactions = 0;
+    let totalChange = 0;
+    
+    $('.amount-input').each(function() {
+        const amount = parseFloat($(this).val());
+        if (!isNaN(amount) && amount !== 0) {
+            totalTransactions++;
+            totalChange += amount;
+        }
+    });
+    
+    $('#totalTransactions').text(`${totalTransactions} معاملة`);
+    
+    if ($('#currentBalance').text() !== '0.00 د.أ') {
+        const currentBalance = parseFloat($('#currentBalance').text().replace(/[^\d.-]/g, ''));
+        const expectedBalance = currentBalance + totalChange;
+        
+        $('#expectedBalance').text(expectedBalance.toLocaleString('ar-JO', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        }) + ' د.أ');
+        
+        const changeText = totalChange >= 0 ? `+${totalChange.toFixed(2)}` : totalChange.toFixed(2);
+        $('#balanceChange').text(changeText).removeClass('text-success text-danger')
+            .addClass(totalChange >= 0 ? 'text-success' : 'text-danger');
+    }
+}
+
+function updateSaveButton() {
+    const bankAccountSelected = $('#bankAccount').val() !== '';
+    const dateSelected = $('#transactionDate').val() !== '';
+    const hasValidTransactions = $('.amount-input').toArray().some(input => {
+        const amount = parseFloat($(input).val());
+        const accountSelected = $(input).closest('tr').find('.account-select').val() !== '';
+        return !isNaN(amount) && amount !== 0 && accountSelected;
+    });
+    
+    $('#saveAllBtn').prop('disabled', !(bankAccountSelected && dateSelected && hasValidTransactions));
+}
+
+function saveAllTransactions() {
+    const bankAccountId = $('#bankAccount').val();
+    const transactionDate = $('#transactionDate').val();
+    
+    // Collect valid transactions
+    const transactions = [];
+    $('.amount-input').each(function() {
+        const amount = parseFloat($(this).val());
+        const rowId = $(this).data('row');
+        const correspondingAccountId = $(`.account-select[data-row="${rowId}"]`).val();
+        
+        if (!isNaN(amount) && amount !== 0 && correspondingAccountId) {
+            transactions.push({
+                amount: amount,
+                corresponding_account_id: correspondingAccountId
+            });
+        }
+    });
+    
+    if (transactions.length === 0) {
+        showMessage('لا توجد معاملات صالحة للحفظ', 'error');
+        return;
+    }
+    
+    const $saveBtn = $('#saveAllBtn');
+    $saveBtn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-2"></i>جاري الحفظ...');
+    
+    $.ajax({
+        url: '/add_bulk_transactions',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({
+            bank_account_id: bankAccountId,
+            transaction_date: transactionDate,
+            transactions: transactions
+        }),
+        success: function(response) {
+            if (response.success) {
+                showMessage(response.message, 'success');
+                
+                // Update balance display
+                if (response.new_balance !== undefined) {
+                    $('#currentBalance').text(parseFloat(response.new_balance).toLocaleString('ar-JO', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                    }) + ' د.أ');
+                }
+                
+                // Clear form
+                clearAllRows();
+                calculateTotals();
+            } else {
+                showMessage(response.message, 'error');
+            }
+        },
+        error: function() {
+            showMessage('خطأ في الشبكة أثناء حفظ المعاملات', 'error');
+        },
+        complete: function() {
+            $saveBtn.prop('disabled', false).html('<i class="fas fa-save me-2"></i>حفظ جميع المعاملات');
+        }
+    });
+}
+
+function filterAccounts(type) {
+    $('.account-select option').each(function() {
+        const optionType = $(this).data('type');
+        if (type === 'all' || optionType === type || $(this).val() === '') {
+            $(this).show();
+        } else {
+            $(this).hide();
+        }
+    });
+}
+
+function showMessage(message, type) {
+    const alertClass = type === 'success' ? 'alert-success' : 
+                      type === 'warning' ? 'alert-warning' : 'alert-danger';
+    
+    const alertHtml = `
+        <div class="alert ${alertClass} alert-dismissible fade show" role="alert">
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    `;
+    
+    $('.container').prepend(alertHtml);
+    
+    // Auto-dismiss after 5 seconds
+    setTimeout(() => {
+        $('.alert').alert('close');
+    }, 5000);
+}
+</script>
+{% endblock %} 

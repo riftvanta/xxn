@@ -33,5 +33,5 @@ echo "✅ PostgreSQL is running"
 echo "🚀 Starting Flask application..."
 echo ""
 
-# Start the application
-python app.py 
+# Activate virtual environment and start the application
+source venv/bin/activate && python app.py 

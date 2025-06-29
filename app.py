@@ -180,6 +180,103 @@ def transaction_history():
     transactions = Transaction.query.order_by(Transaction.transaction_date.desc()).limit(100).all()
     return render_template('transaction_history.html', transactions=transactions)
 
+@app.route('/bulk_transactions')
+def bulk_transactions():
+    bank_accounts = BankAccount.query.all()
+    corresponding_accounts = CorrespondingAccount.query.all()
+    
+    # Convert corresponding accounts to dictionaries for JavaScript
+    corresponding_accounts_json = [
+        {
+            'id': acc.id,
+            'name': acc.name,
+            'type': acc.type
+        }
+        for acc in corresponding_accounts
+    ]
+    
+    return render_template('bulk_transactions.html',
+                         bank_accounts=bank_accounts,
+                         corresponding_accounts=corresponding_accounts,
+                         corresponding_accounts_json=corresponding_accounts_json)
+
+@app.route('/add_bulk_transactions', methods=['POST'])
+def add_bulk_transactions():
+    try:
+        data = request.get_json()
+        bank_account_id = int(data['bank_account_id'])
+        transaction_date = datetime.strptime(data['transaction_date'], '%Y-%m-%d').date()
+        transactions_data = data['transactions']
+        
+        # Validate transactions data
+        if not transactions_data:
+            return jsonify({
+                'success': False,
+                'message': 'لا توجد معاملات للحفظ'
+            })
+        
+        saved_count = 0
+        errors = []
+        
+        # Get bank account for balance updates
+        bank_account = BankAccount.query.get_or_404(bank_account_id)
+        
+        for i, trans_data in enumerate(transactions_data):
+            try:
+                amount = Decimal(str(abs(float(trans_data['amount']))))  # Always positive
+                original_amount = float(trans_data['amount'])
+                corresponding_account_id = int(trans_data['corresponding_account_id'])
+                
+                # Determine transaction type based on sign
+                transaction_type = 'debit' if original_amount < 0 else 'credit'
+                
+                # Create transaction
+                transaction = Transaction(
+                    bank_account_id=bank_account_id,
+                    corresponding_account_id=corresponding_account_id,
+                    amount=amount,
+                    transaction_type=transaction_type,
+                    transaction_date=transaction_date,
+                    notes=''
+                )
+                
+                # Update bank account balance
+                if transaction_type == 'credit':
+                    bank_account.current_balance += amount
+                else:  # debit
+                    bank_account.current_balance -= amount
+                
+                db.session.add(transaction)
+                saved_count += 1
+                
+            except Exception as e:
+                errors.append(f'المعاملة {i + 1}: {str(e)}')
+        
+        if saved_count > 0:
+            db.session.commit()
+            
+        if errors:
+            return jsonify({
+                'success': True,
+                'message': f'تم حفظ {saved_count} معاملة بنجاح. أخطاء: {"; ".join(errors)}',
+                'new_balance': float(bank_account.current_balance),
+                'saved_count': saved_count
+            })
+        else:
+            return jsonify({
+                'success': True,
+                'message': f'تم حفظ {saved_count} معاملة بنجاح',
+                'new_balance': float(bank_account.current_balance),
+                'saved_count': saved_count
+            })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'message': f'خطأ في حفظ المعاملات: {str(e)}'
+        })
+
 @app.route('/api/account_balance/<int:account_id>')
 def get_account_balance(account_id):
     account = BankAccount.query.get_or_404(account_id)
