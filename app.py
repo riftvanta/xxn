@@ -8,11 +8,16 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY') or 'your-secret-key-change-in-production'
 
 # Database Configuration
-# Use PostgreSQL if DATABASE_URL is set, otherwise fall back to SQLite
+# Railway provides DATABASE_URL for PostgreSQL
 if os.environ.get('DATABASE_URL'):
-    app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
+    # Railway PostgreSQL connection (production)
+    database_url = os.environ.get('DATABASE_URL')
+    # Handle Railway's postgres:// vs postgresql:// URL format
+    if database_url.startswith('postgres://'):
+        database_url = database_url.replace('postgres://', 'postgresql://', 1)
+    app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 elif os.environ.get('POSTGRES_USER'):
-    # Build PostgreSQL URL from environment variables
+    # Build PostgreSQL URL from environment variables (local development)
     postgres_user = os.environ.get('POSTGRES_USER', 'bankuser')
     postgres_password = os.environ.get('POSTGRES_PASSWORD', 'bankpass123')
     postgres_host = os.environ.get('POSTGRES_HOST', 'localhost')
@@ -200,4 +205,9 @@ def system_info():
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-    app.run(debug=True) 
+    
+    # Get port from environment variable (Railway sets this)
+    port = int(os.environ.get('PORT', 5000))
+    debug = os.environ.get('FLASK_ENV') != 'production'
+    
+    app.run(host='0.0.0.0', port=port, debug=debug) 
