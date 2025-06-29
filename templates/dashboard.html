@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+
+{% block title %}الرئيسية - نظام إدارة الحسابات البنكية{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Quick Stats -->
+    <div class="col-md-4 mb-4">
+        <div class="card quick-stats">
+            <div class="card-body text-center">
+                <i class="fas fa-coins fa-3x mb-3"></i>
+                <h3>{{ "{:,.2f}".format(total_balance) }} د.أ</h3>
+                <p class="mb-0">إجمالي الأرصدة</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4 mb-4">
+        <div class="card quick-stats">
+            <div class="card-body text-center">
+                <i class="fas fa-university fa-3x mb-3"></i>
+                <h3>{{ total_accounts }}</h3>
+                <p class="mb-0">عدد الحسابات</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4 mb-4">
+        <div class="card quick-stats">
+            <div class="card-body text-center">
+                <i class="fas fa-exchange-alt fa-3x mb-3"></i>
+                <h3>{{ total_transactions }}</h3>
+                <p class="mb-0">عدد المعاملات</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Bank Accounts Overview -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-list me-2"></i>
+                    نظرة عامة على الحسابات البنكية
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if bank_accounts %}
+                    <div class="row">
+                        {% for account in bank_accounts %}
+                            {% set balance_change = account.current_balance - account.starting_balance %}
+                            <div class="col-md-6 col-lg-4 mb-3">
+                                <div class="card balance-card {% if account.current_balance < 0 %}balance-negative{% endif %}">
+                                    <div class="card-body">
+                                        <h6 class="card-title">
+                                            <i class="fas fa-university me-2"></i>
+                                            {{ account.name }}
+                                        </h6>
+                                        <div class="mb-2">
+                                            <strong>الرصيد الحالي:</strong>
+                                            <h4>{{ "{:,.2f}".format(account.current_balance) }} د.أ</h4>
+                                        </div>
+                                        <small>
+                                            الرصيد الافتتاحي: {{ "{:,.2f}".format(account.starting_balance) }} د.أ
+                                        </small>
+                                        <br>
+                                        <small>
+                                            {% if balance_change > 0 %}
+                                                <i class="fas fa-arrow-up text-success"></i>
+                                                ربح: {{ "{:,.2f}".format(balance_change) }} د.أ
+                                            {% elif balance_change < 0 %}
+                                                <i class="fas fa-arrow-down text-danger"></i>
+                                                خسارة: {{ "{:,.2f}".format(balance_change|abs) }} د.أ
+                                            {% else %}
+                                                <i class="fas fa-minus text-muted"></i>
+                                                لا يوجد تغيير
+                                            {% endif %}
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-university fa-5x text-muted mb-3"></i>
+                        <h4 class="text-muted">لا توجد حسابات بنكية</h4>
+                        <p class="text-muted">قم بإضافة حساباتك البنكية للبدء في تتبع معاملاتك</p>
+                        <a href="{{ url_for('setup') }}" class="btn btn-primary">
+                            <i class="fas fa-plus me-2"></i>
+                            إضافة حساب بنكي
+                        </a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-bolt me-2"></i>
+                    الإجراءات السريعة
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3 mb-3">
+                        <a href="{{ url_for('transactions') }}" class="btn btn-primary w-100 p-3">
+                            <i class="fas fa-plus-circle fa-2x d-block mb-2"></i>
+                            إضافة معاملة جديدة
+                        </a>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <a href="{{ url_for('transaction_history') }}" class="btn btn-info w-100 p-3">
+                            <i class="fas fa-history fa-2x d-block mb-2"></i>
+                            عرض سجل المعاملات
+                        </a>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <a href="{{ url_for('setup') }}" class="btn btn-warning w-100 p-3">
+                            <i class="fas fa-cog fa-2x d-block mb-2"></i>
+                            إعدادات الحسابات
+                        </a>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <button class="btn btn-success w-100 p-3" onclick="window.print()">
+                            <i class="fas fa-print fa-2x d-block mb-2"></i>
+                            طباعة التقرير
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Transactions Preview -->
+{% if total_transactions > 0 %}
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="fas fa-clock me-2"></i>
+                    آخر المعاملات
+                </h5>
+                <a href="{{ url_for('transaction_history') }}" class="btn btn-sm btn-outline-light">
+                    عرض الكل
+                    <i class="fas fa-arrow-left me-1"></i>
+                </a>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">سيتم عرض آخر 5 معاملات هنا...</p>
+                <a href="{{ url_for('transaction_history') }}" class="btn btn-primary">
+                    عرض سجل المعاملات الكامل
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Auto refresh dashboard every 30 seconds if there are active transactions
+{% if total_transactions > 0 %}
+setInterval(function() {
+    // Check if user is not actively using the page
+    if (document.hasFocus()) {
+        window.location.reload();
+    }
+}, 30000);
+{% endif %}
+</script>
+{% endblock %} 

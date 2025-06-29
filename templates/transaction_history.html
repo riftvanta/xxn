@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+
+{% block title %}سجل المعاملات - نظام إدارة الحسابات البنكية{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="fas fa-history me-2"></i>
+                    سجل المعاملات (آخر 100 معاملة)
+                </h5>
+                <div>
+                    <button class="btn btn-success btn-sm" onclick="window.print()">
+                        <i class="fas fa-print me-1"></i>
+                        طباعة
+                    </button>
+                    <a href="{{ url_for('transactions') }}" class="btn btn-primary btn-sm">
+                        <i class="fas fa-plus me-1"></i>
+                        إضافة معاملة جديدة
+                    </a>
+                </div>
+            </div>
+            <div class="card-body">
+                {% if transactions %}
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>التاريخ</th>
+                                    <th>الحساب البنكي</th>
+                                    <th>الحساب المقابل</th>
+                                    <th>المبلغ</th>
+                                    <th>النوع</th>
+                                    <th>الملاحظات</th>
+                                    <th>وقت الإضافة</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for transaction in transactions %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ transaction.transaction_date.strftime('%Y-%m-%d') }}</strong>
+                                    </td>
+                                    <td>
+                                        <i class="fas fa-university text-primary me-2"></i>
+                                        {{ transaction.bank_account.name }}
+                                    </td>
+                                    <td>
+                                        {% if transaction.corresponding_account.type == 'client' %}
+                                            <i class="fas fa-user text-info me-2"></i>
+                                        {% elif transaction.corresponding_account.type == 'expense' %}
+                                            <i class="fas fa-shopping-cart text-warning me-2"></i>
+                                        {% elif transaction.corresponding_account.type == 'supplier' %}
+                                            <i class="fas fa-truck text-secondary me-2"></i>
+                                        {% else %}
+                                            <i class="fas fa-university text-primary me-2"></i>
+                                        {% endif %}
+                                        {{ transaction.corresponding_account.name }}
+                                        <br>
+                                        <small class="text-muted">
+                                            ({% if transaction.corresponding_account.type == 'client' %}عميل
+                                            {% elif transaction.corresponding_account.type == 'expense' %}مصروف
+                                            {% elif transaction.corresponding_account.type == 'supplier' %}مورد
+                                            {% else %}بنك آخر
+                                            {% endif %})
+                                        </small>
+                                    </td>
+                                    <td>
+                                        <strong class="h6">{{ "{:,.2f}".format(transaction.amount) }} د.أ</strong>
+                                    </td>
+                                    <td>
+                                        {% if transaction.transaction_type == 'credit' %}
+                                            <span class="badge bg-success">
+                                                <i class="fas fa-arrow-down me-1"></i>
+                                                وارد
+                                            </span>
+                                        {% else %}
+                                            <span class="badge bg-danger">
+                                                <i class="fas fa-arrow-up me-1"></i>
+                                                صادر
+                                            </span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if transaction.notes %}
+                                            {{ transaction.notes }}
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <small class="text-muted">
+                                            {{ transaction.created_at.strftime('%Y-%m-%d %H:%M') }}
+                                        </small>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <!-- Summary Statistics -->
+                    <div class="row mt-4">
+                        <div class="col-md-4">
+                            <div class="card bg-success text-white">
+                                <div class="card-body text-center">
+                                    <h6>إجمالي الوارد</h6>
+                                    {% set total_credits = transactions|selectattr('transaction_type', 'equalto', 'credit')|map(attribute='amount')|sum %}
+                                    <h4>{{ "{:,.2f}".format(total_credits) }} د.أ</h4>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card bg-danger text-white">
+                                <div class="card-body text-center">
+                                    <h6>إجمالي الصادر</h6>
+                                    {% set total_debits = transactions|selectattr('transaction_type', 'equalto', 'debit')|map(attribute='amount')|sum %}
+                                    <h4>{{ "{:,.2f}".format(total_debits) }} د.أ</h4>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card bg-info text-white">
+                                <div class="card-body text-center">
+                                    <h6>صافي الحركة</h6>
+                                    {% set net_movement = total_credits - total_debits %}
+                                    <h4>{{ "{:,.2f}".format(net_movement) }} د.أ</h4>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-history fa-5x text-muted mb-3"></i>
+                        <h4 class="text-muted">لا توجد معاملات</h4>
+                        <p class="text-muted">لم يتم إدخال أي معاملات بعد. ابدأ بإضافة معاملاتك الأولى.</p>
+                        <a href="{{ url_for('transactions') }}" class="btn btn-primary btn-lg">
+                            <i class="fas fa-plus me-2"></i>
+                            إضافة معاملة جديدة
+                        </a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Print Styles -->
+<style>
+@media print {
+    .btn, .navbar, .alert {
+        display: none !important;
+    }
+    
+    .card {
+        border: none !important;
+        box-shadow: none !important;
+    }
+    
+    .table {
+        font-size: 12px;
+    }
+    
+    .badge {
+        color: #000 !important;
+        background-color: transparent !important;
+        border: 1px solid #000 !important;
+    }
+}
+</style>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Add search/filter functionality
+function filterTransactions() {
+    // This could be enhanced with date range filtering, account filtering, etc.
+    // For MVP, we'll keep it simple
+}
+
+// Format numbers for better readability
+$(document).ready(function() {
+    // Any additional JavaScript for transaction history can go here
+    console.log('Transaction history loaded with {{ transactions|length }} transactions');
+});
+</script>
+{% endblock %} 

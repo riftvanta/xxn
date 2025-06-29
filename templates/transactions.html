@@ -1,0 +1,402 @@
+{% extends "base.html" %}
+
+{% block title %}إدخال المعاملات - نظام إدارة الحسابات البنكية{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8">
+        <!-- Transaction Entry Form -->
+        <div class="transaction-form">
+            <h4 class="mb-4">
+                <i class="fas fa-plus-circle me-2"></i>
+                إدخال معاملة جديدة
+            </h4>
+            
+            <form id="transactionForm">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">الحساب البنكي</label>
+                        <select class="form-select" id="bankAccount" name="bank_account_id" required>
+                            <option value="">اختر الحساب البنكي</option>
+                            {% for account in bank_accounts %}
+                                <option value="{{ account.id }}">{{ account.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">تاريخ المعاملة</label>
+                        <input type="date" class="form-control" id="transactionDate" name="transaction_date" required>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">الحساب المقابل</label>
+                        <select class="form-select" id="correspondingAccount" name="corresponding_account_id" required>
+                            <option value="">اختر الحساب المقابل</option>
+                            {% for account in corresponding_accounts %}
+                                <option value="{{ account.id }}" data-type="{{ account.type }}">
+                                    {{ account.name }} ({{ account.type }})
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">نوع المعاملة</label>
+                        <div class="btn-group w-100" role="group">
+                            <input type="radio" class="btn-check" name="transaction_type" id="credit" value="credit" checked>
+                            <label class="btn btn-outline-success" for="credit">
+                                <i class="fas fa-arrow-down me-1"></i>
+                                وارد (دائن)
+                            </label>
+                            
+                            <input type="radio" class="btn-check" name="transaction_type" id="debit" value="debit">
+                            <label class="btn btn-outline-danger" for="debit">
+                                <i class="fas fa-arrow-up me-1"></i>
+                                صادر (مدين)
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">المبلغ (د.أ)</label>
+                        <input type="number" class="form-control" id="amount" name="amount" 
+                               step="0.01" min="0" placeholder="0.00" required>
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">ملاحظات</label>
+                        <input type="text" class="form-control" id="notes" name="notes" 
+                               placeholder="ملاحظات اختيارية">
+                    </div>
+                </div>
+                
+                <div class="d-flex justify-content-between">
+                    <button type="submit" class="btn btn-primary btn-lg">
+                        <i class="fas fa-plus me-2"></i>
+                        إضافة إلى القائمة
+                    </button>
+                    
+                    <button type="button" class="btn btn-success btn-lg" id="saveAllBtn" disabled>
+                        <i class="fas fa-save me-2"></i>
+                        حفظ جميع المعاملات (<span id="pendingCount">0</span>)
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <!-- Current Balance Display -->
+        <div class="card balance-card mb-3" id="balanceCard" style="display: none;">
+            <div class="card-body text-center">
+                <h6>الرصيد الحالي</h6>
+                <h3 id="currentBalance">0.00 د.أ</h3>
+                <small id="accountName">-</small>
+            </div>
+        </div>
+        
+        <!-- Quick Account Types -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <h6 class="mb-0">
+                    <i class="fas fa-tachometer-alt me-2"></i>
+                    إضافة سريعة للحسابات المقابلة
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="mb-2">
+                    <button class="btn btn-sm btn-info w-100 mb-1" onclick="filterAccounts('client')">
+                        <i class="fas fa-user me-1"></i>
+                        العملاء
+                    </button>
+                    <button class="btn btn-sm btn-warning w-100 mb-1" onclick="filterAccounts('expense')">
+                        <i class="fas fa-shopping-cart me-1"></i>
+                        المصروفات
+                    </button>
+                    <button class="btn btn-sm btn-secondary w-100 mb-1" onclick="filterAccounts('supplier')">
+                        <i class="fas fa-truck me-1"></i>
+                        الموردين
+                    </button>
+                    <button class="btn btn-sm btn-primary w-100" onclick="filterAccounts('all')">
+                        <i class="fas fa-list me-1"></i>
+                        عرض الكل
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Pending Transactions Table -->
+<div class="row mt-4" id="pendingTransactionsSection" style="display: none;">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-clock me-2"></i>
+                    المعاملات المؤقتة (في انتظار الحفظ)
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped" id="pendingTransactionsTable">
+                        <thead>
+                            <tr>
+                                <th>التاريخ</th>
+                                <th>الحساب المقابل</th>
+                                <th>المبلغ</th>
+                                <th>النوع</th>
+                                <th>الملاحظات</th>
+                                <th>العمليات</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let pendingTransactions = [];
+
+$(document).ready(function() {
+    // Set today's date as default
+    const today = new Date().toISOString().split('T')[0];
+    $('#transactionDate').val(today);
+    
+    // Load account balance when bank account is selected
+    $('#bankAccount').change(function() {
+        const accountId = $(this).val();
+        if (accountId) {
+            loadAccountBalance(accountId);
+        } else {
+            $('#balanceCard').hide();
+        }
+    });
+    
+    // Handle form submission
+    $('#transactionForm').submit(function(e) {
+        e.preventDefault();
+        addTransactionToPending();
+    });
+    
+    // Handle save all transactions
+    $('#saveAllBtn').click(function() {
+        saveAllTransactions();
+    });
+    
+    // Auto-focus amount field after selecting corresponding account
+    $('#correspondingAccount').change(function() {
+        if ($(this).val()) {
+            $('#amount').focus();
+        }
+    });
+    
+    // Enter key navigation
+    $('#amount').keypress(function(e) {
+        if (e.which === 13) {
+            $('#notes').focus();
+        }
+    });
+    
+    $('#notes').keypress(function(e) {
+        if (e.which === 13) {
+            $('#transactionForm').submit();
+        }
+    });
+});
+
+function loadAccountBalance(accountId) {
+    $.get(`/api/account_balance/${accountId}`)
+        .done(function(data) {
+            $('#currentBalance').text(parseFloat(data.balance).toLocaleString('ar-JO', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            }) + ' د.أ');
+            $('#accountName').text(data.name);
+            $('#balanceCard').show();
+        })
+        .fail(function() {
+            alert('خطأ في تحميل رصيد الحساب');
+        });
+}
+
+function addTransactionToPending() {
+    const formData = {
+        bank_account_id: $('#bankAccount').val(),
+        bank_account_name: $('#bankAccount option:selected').text(),
+        corresponding_account_id: $('#correspondingAccount').val(),
+        corresponding_account_name: $('#correspondingAccount option:selected').text(),
+        amount: parseFloat($('#amount').val()),
+        transaction_type: $('input[name="transaction_type"]:checked').val(),
+        transaction_date: $('#transactionDate').val(),
+        notes: $('#notes').val()
+    };
+    
+    // Validate required fields
+    if (!formData.bank_account_id || !formData.corresponding_account_id || !formData.amount) {
+        alert('يرجى ملء جميع الحقول المطلوبة');
+        return;
+    }
+    
+    // Add to pending transactions
+    pendingTransactions.push(formData);
+    
+    // Update UI
+    updatePendingTransactionsTable();
+    updatePendingCount();
+    
+    // Clear form (except bank account and date)
+    $('#correspondingAccount').val('');
+    $('#amount').val('');
+    $('#notes').val('');
+    $('#credit').prop('checked', true);
+    
+    // Focus on corresponding account for next entry
+    $('#correspondingAccount').focus();
+    
+    // Show success message
+    showMessage('تم إضافة المعاملة إلى القائمة المؤقتة', 'success');
+}
+
+function updatePendingTransactionsTable() {
+    const tbody = $('#pendingTransactionsTable tbody');
+    tbody.empty();
+    
+    pendingTransactions.forEach((transaction, index) => {
+        const typeClass = transaction.transaction_type === 'credit' ? 'text-success' : 'text-danger';
+        const typeText = transaction.transaction_type === 'credit' ? 'وارد' : 'صادر';
+        
+        const row = `
+            <tr>
+                <td>${transaction.transaction_date}</td>
+                <td>${transaction.corresponding_account_name}</td>
+                <td>${transaction.amount.toLocaleString('ar-JO', {minimumFractionDigits: 2})} د.أ</td>
+                <td><span class="${typeClass}">${typeText}</span></td>
+                <td>${transaction.notes || '-'}</td>
+                <td>
+                    <button class="btn btn-sm btn-danger" onclick="removePendingTransaction(${index})">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
+            </tr>
+        `;
+        tbody.append(row);
+    });
+    
+    if (pendingTransactions.length > 0) {
+        $('#pendingTransactionsSection').show();
+    } else {
+        $('#pendingTransactionsSection').hide();
+    }
+}
+
+function updatePendingCount() {
+    const count = pendingTransactions.length;
+    $('#pendingCount').text(count);
+    $('#saveAllBtn').prop('disabled', count === 0);
+}
+
+function removePendingTransaction(index) {
+    pendingTransactions.splice(index, 1);
+    updatePendingTransactionsTable();
+    updatePendingCount();
+}
+
+function saveAllTransactions() {
+    if (pendingTransactions.length === 0) {
+        return;
+    }
+    
+    const saveBtn = $('#saveAllBtn');
+    saveBtn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-2"></i>جاري الحفظ...');
+    
+    // Save transactions one by one
+    let savedCount = 0;
+    let errors = [];
+    
+    pendingTransactions.forEach((transaction, index) => {
+        $.post('/add_transaction', transaction)
+            .done(function(response) {
+                if (response.success) {
+                    savedCount++;
+                } else {
+                    errors.push(`المعاملة ${index + 1}: ${response.message}`);
+                }
+            })
+            .fail(function() {
+                errors.push(`المعاملة ${index + 1}: خطأ في الشبكة`);
+            })
+            .always(function() {
+                // Check if all transactions are processed
+                if (savedCount + errors.length === pendingTransactions.length) {
+                    if (errors.length === 0) {
+                        showMessage(`تم حفظ ${savedCount} معاملة بنجاح`, 'success');
+                        pendingTransactions = [];
+                        updatePendingTransactionsTable();
+                        updatePendingCount();
+                        
+                        // Reload account balance
+                        const accountId = $('#bankAccount').val();
+                        if (accountId) {
+                            loadAccountBalance(accountId);
+                        }
+                    } else {
+                        showMessage(`تم حفظ ${savedCount} معاملة. أخطاء: ${errors.join(', ')}`, 'warning');
+                    }
+                    
+                    saveBtn.prop('disabled', false).html('<i class="fas fa-save me-2"></i>حفظ جميع المعاملات (<span id="pendingCount">0</span>)');
+                }
+            });
+    });
+}
+
+function filterAccounts(type) {
+    const select = $('#correspondingAccount');
+    const options = select.find('option');
+    
+    if (type === 'all') {
+        options.show();
+    } else {
+        options.each(function() {
+            const optionType = $(this).data('type');
+            if (optionType === type || $(this).val() === '') {
+                $(this).show();
+            } else {
+                $(this).hide();
+            }
+        });
+    }
+}
+
+function showMessage(message, type) {
+    const alertClass = type === 'success' ? 'alert-success' : 
+                      type === 'warning' ? 'alert-warning' : 'alert-danger';
+    
+    const alertHtml = `
+        <div class="alert ${alertClass} alert-dismissible fade show" role="alert">
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    `;
+    
+    $('.container').prepend(alertHtml);
+    
+    // Auto-dismiss after 3 seconds
+    setTimeout(() => {
+        $('.alert').alert('close');
+    }, 3000);
+}
+</script>
+{% endblock %} 
