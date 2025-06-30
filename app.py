@@ -47,7 +47,7 @@ class BankAccount(db.Model):
 class CorrespondingAccount(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), nullable=False)
-    type = db.Column(db.String(50), nullable=False)  # client, expense, supplier, bank
+    type = db.Column(db.String(50), nullable=False)  # client, expense, supplier, bank, revenue, commission
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     def __repr__(self):
@@ -63,8 +63,8 @@ class GeneralJournalEntry(db.Model):
 
 class Transaction(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    bank_account_id = db.Column(db.Integer, db.ForeignKey('bank_account.id'), nullable=False)
-    corresponding_account_id = db.Column(db.Integer, db.ForeignKey('corresponding_account.id'), nullable=False)
+    bank_account_id = db.Column(db.Integer, db.ForeignKey('bank_account.id'), nullable=True)
+    corresponding_account_id = db.Column(db.Integer, db.ForeignKey('corresponding_account.id'), nullable=True)
     amount = db.Column(db.Numeric(12, 2), nullable=False)
     transaction_type = db.Column(db.String(10), nullable=False)  # credit or debit
     transaction_date = db.Column(db.Date, nullable=False)
@@ -152,6 +152,13 @@ def add_transaction():
         transaction_date = datetime.strptime(request.form['transaction_date'], '%Y-%m-%d').date()
         notes = request.form.get('notes', '')
         
+        # Validation: Regular transactions must have both accounts
+        if not bank_account_id or not corresponding_account_id:
+            return jsonify({
+                'success': False,
+                'message': 'يجب تحديد كل من الحساب البنكي والحساب المقابل'
+            })
+        
         # Create transaction
         transaction = Transaction(
             bank_account_id=bank_account_id,
@@ -236,6 +243,11 @@ def add_bulk_transactions():
                 amount = Decimal(str(abs(float(trans_data['amount']))))  # Always positive
                 original_amount = float(trans_data['amount'])
                 corresponding_account_id = int(trans_data['corresponding_account_id'])
+                
+                # Validation: Bulk transactions must have both accounts
+                if not bank_account_id or not corresponding_account_id:
+                    errors.append(f'المعاملة {i + 1}: يجب تحديد كل من الحساب البنكي والحساب المقابل')
+                    continue
                 
                 # Determine transaction type based on sign
                 transaction_type = 'debit' if original_amount < 0 else 'credit'
@@ -365,6 +377,10 @@ def add_general_journal_entry():
                     account_id = acc_data['account_id']
                     account_type = acc_data['account_type']
                     
+                    # Validation: Must have an account specified
+                    if not account_id or not account_type:
+                        continue  # Skip invalid entries
+                    
                     # Parse account ID
                     if account_type == 'bank':
                         bank_account_id = int(account_id.replace('bank_', ''))
@@ -372,7 +388,8 @@ def add_general_journal_entry():
                         
                         # Update bank account balance
                         bank_account = BankAccount.query.get(bank_account_id)
-                        bank_account.current_balance += Decimal(str(amount))
+                        if bank_account:
+                            bank_account.current_balance += Decimal(str(amount))
                         
                     else:
                         bank_account_id = None

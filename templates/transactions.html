@@ -43,7 +43,14 @@
                             <option value="">اختر الحساب المقابل</option>
                             {% for account in corresponding_accounts %}
                                 <option value="{{ account.id }}" data-type="{{ account.type }}">
-                                    {{ account.name }} ({{ account.type }})
+                                    {{ account.name }} ({% if account.type == 'client' %}عميل
+                                    {% elif account.type == 'expense' %}مصروف
+                                    {% elif account.type == 'supplier' %}مورد
+                                    {% elif account.type == 'bank' %}بنك آخر
+                                    {% elif account.type == 'revenue' %}إيراد
+                                    {% elif account.type == 'commission' %}عمولة
+                                    {% else %}{{ account.type }}
+                                    {% endif %})
                                 </option>
                             {% endfor %}
                         </select>
@@ -127,6 +134,14 @@
                     <button class="btn btn-sm btn-secondary w-100 mb-1" onclick="filterAccounts('supplier')">
                         <i class="fas fa-truck me-1"></i>
                         الموردين
+                    </button>
+                    <button class="btn btn-sm btn-success w-100 mb-1" onclick="filterAccounts('revenue')">
+                        <i class="fas fa-chart-line me-1"></i>
+                        الإيرادات
+                    </button>
+                    <button class="btn btn-sm btn-success w-100 mb-1" onclick="filterAccounts('commission')">
+                        <i class="fas fa-percentage me-1"></i>
+                        العمولات
                     </button>
                     <button class="btn btn-sm btn-primary w-100" onclick="filterAccounts('all')">
                         <i class="fas fa-list me-1"></i>

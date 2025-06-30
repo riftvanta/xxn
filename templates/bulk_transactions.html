@@ -141,6 +141,14 @@
                         <i class="fas fa-truck me-1"></i>
                         الموردين
                     </button>
+                    <button class="btn btn-sm btn-success" onclick="filterAccounts('revenue')">
+                        <i class="fas fa-chart-line me-1"></i>
+                        الإيرادات
+                    </button>
+                    <button class="btn btn-sm btn-success" onclick="filterAccounts('commission')">
+                        <i class="fas fa-percentage me-1"></i>
+                        العمولات
+                    </button>
                     <button class="btn btn-sm btn-outline-primary" onclick="filterAccounts('all')">
                         <i class="fas fa-list me-1"></i>
                         عرض الكل
@@ -157,6 +165,19 @@
 <script>
 let rowCounter = 0;
 let correspondingAccounts = {{ corresponding_accounts_json|tojson }};
+
+// Function to translate account types to Arabic
+function translateAccountType(type) {
+    const translations = {
+        'client': 'عميل',
+        'expense': 'مصروف',
+        'supplier': 'مورد',
+        'bank': 'بنك آخر',
+        'revenue': 'إيراد',
+        'commission': 'عمولة'
+    };
+    return translations[type] || type;
+}
 
 $(document).ready(function() {
     // Set today's date as default
@@ -234,7 +255,7 @@ $(document).ready(function() {
 function addTransactionRow() {
     rowCounter++;
     const accountOptions = correspondingAccounts.map(acc => 
-        `<option value="${acc.id}" data-type="${acc.type}">${acc.name} (${acc.type})</option>`
+        `<option value="${acc.id}" data-type="${acc.type}">${acc.name} (${translateAccountType(acc.type)})</option>`
     ).join('');
     
     const row = `

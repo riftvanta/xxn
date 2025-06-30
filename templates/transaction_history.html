@@ -54,6 +54,10 @@
                                             <i class="fas fa-shopping-cart text-warning me-2"></i>
                                         {% elif transaction.corresponding_account.type == 'supplier' %}
                                             <i class="fas fa-truck text-secondary me-2"></i>
+                                        {% elif transaction.corresponding_account.type == 'revenue' %}
+                                            <i class="fas fa-chart-line text-success me-2"></i>
+                                        {% elif transaction.corresponding_account.type == 'commission' %}
+                                            <i class="fas fa-percentage text-success me-2"></i>
                                         {% else %}
                                             <i class="fas fa-university text-primary me-2"></i>
                                         {% endif %}
@@ -63,6 +67,8 @@
                                             ({% if transaction.corresponding_account.type == 'client' %}عميل
                                             {% elif transaction.corresponding_account.type == 'expense' %}مصروف
                                             {% elif transaction.corresponding_account.type == 'supplier' %}مورد
+                                            {% elif transaction.corresponding_account.type == 'revenue' %}إيراد
+                                            {% elif transaction.corresponding_account.type == 'commission' %}عمولة
                                             {% else %}بنك آخر
                                             {% endif %})
                                         </small>

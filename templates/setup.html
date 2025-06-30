@@ -52,10 +52,12 @@
                         <label class="form-label">نوع الحساب</label>
                         <select class="form-select" name="type" required>
                             <option value="">اختر نوع الحساب</option>
-                            <option value="client">عميل - Client</option>
-                            <option value="expense">مصروف - Expense</option>
-                            <option value="supplier">مورد - Supplier</option>
-                            <option value="bank">بنك آخر - Other Bank</option>
+                            <option value="client">عميل</option>
+                            <option value="expense">مصروف</option>
+                            <option value="supplier">مورد</option>
+                            <option value="bank">بنك آخر</option>
+                            <option value="revenue">إيراد</option>
+                            <option value="commission">عمولة</option>
                         </select>
                     </div>
                     <button type="submit" class="btn btn-success">
@@ -156,6 +158,10 @@
                                             <i class="fas fa-shopping-cart text-warning fa-2x me-3"></i>
                                         {% elif account.type == 'supplier' %}
                                             <i class="fas fa-truck text-secondary fa-2x me-3"></i>
+                                        {% elif account.type == 'revenue' %}
+                                            <i class="fas fa-chart-line text-success fa-2x me-3"></i>
+                                        {% elif account.type == 'commission' %}
+                                            <i class="fas fa-percentage text-success fa-2x me-3"></i>
                                         {% else %}
                                             <i class="fas fa-university text-primary fa-2x me-3"></i>
                                         {% endif %}
@@ -165,6 +171,8 @@
                                                 {% if account.type == 'client' %}عميل
                                                 {% elif account.type == 'expense' %}مصروف
                                                 {% elif account.type == 'supplier' %}مورد
+                                                {% elif account.type == 'revenue' %}إيراد
+                                                {% elif account.type == 'commission' %}عمولة
                                                 {% else %}بنك آخر
                                                 {% endif %}
                                             </small>
