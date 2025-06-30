@@ -1,0 +1,529 @@
+{% extends "base.html" %}
+
+{% block title %}اليومية العامة - نظام إدارة الحسابات البنكية{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-9">
+        <!-- General Journal Entry Form -->
+        <div class="transaction-form">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h4 class="mb-0">
+                    <i class="fas fa-book me-2"></i>
+                    اليومية العامة - قيود مركبة
+                </h4>
+                <div>
+                    <a href="{{ url_for('bulk_transactions') }}" class="btn btn-outline-info me-2">
+                        <i class="fas fa-list-alt me-1"></i>
+                        المعاملات المجمعة
+                    </a>
+                    <a href="{{ url_for('transactions') }}" class="btn btn-outline-primary">
+                        <i class="fas fa-exchange-alt me-1"></i>
+                        الإدخال المفرد
+                    </a>
+                </div>
+            </div>
+            
+            <!-- Header Controls -->
+            <div class="row mb-4">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">تاريخ القيود *</label>
+                    <input type="date" class="form-control" id="transactionDate" required>
+                </div>
+                
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">إجمالي القيود</label>
+                    <div class="form-control bg-light" id="totalEntries">0 قيد</div>
+                </div>
+            </div>
+            
+            <hr>
+            
+            <!-- Instructions -->
+            <div class="alert alert-info mb-4">
+                <i class="fas fa-info-circle me-2"></i>
+                <strong>قيود مركبة:</strong>
+                كل صف يمثل قيد مستقل يجب أن يكون متوازن (مجموع المبالغ = صفر).
+                استخدم المبالغ الموجبة والسالبة لتمثيل الطرفين.
+                <br><strong>مثال:</strong> تحويل 1000 من البنك للعميل مع عمولة 50:
+                البنك الأول: -1050، العميل: +1000، العمولة: +50
+            </div>
+            
+            <!-- Journal Entries Container -->
+            <div id="journalEntriesContainer">
+                <!-- Journal entries will be added here dynamically -->
+            </div>
+            
+            <!-- Action Buttons -->
+            <div class="d-flex justify-content-between mt-4">
+                <div>
+                    <button type="button" class="btn btn-secondary" id="addEntryBtn">
+                        <i class="fas fa-plus me-2"></i>
+                        إضافة قيد جديد
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary ms-2" id="clearAllBtn">
+                        <i class="fas fa-trash me-2"></i>
+                        مسح الكل
+                    </button>
+                </div>
+                
+                <button type="button" class="btn btn-success btn-lg" id="saveAllBtn" disabled>
+                    <i class="fas fa-save me-2"></i>
+                    حفظ جميع القيود
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <!-- Balance Summary -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <h6 class="mb-0">
+                    <i class="fas fa-balance-scale me-2"></i>
+                    ملخص الأرصدة
+                </h6>
+            </div>
+            <div class="card-body">
+                <div id="balanceSummary">
+                    <small class="text-muted">اختر التاريخ لعرض الأرصدة</small>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Account Filters -->
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0">
+                    <i class="fas fa-filter me-2"></i>
+                    فلترة الحسابات
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <button class="btn btn-sm btn-success" onclick="filterAccounts('bank')">
+                        <i class="fas fa-university me-1"></i>
+                        الحسابات البنكية
+                    </button>
+                    <button class="btn btn-sm btn-info" onclick="filterAccounts('client')">
+                        <i class="fas fa-user me-1"></i>
+                        العملاء
+                    </button>
+                    <button class="btn btn-sm btn-warning" onclick="filterAccounts('expense')">
+                        <i class="fas fa-shopping-cart me-1"></i>
+                        المصروفات
+                    </button>
+                    <button class="btn btn-sm btn-secondary" onclick="filterAccounts('supplier')">
+                        <i class="fas fa-truck me-1"></i>
+                        الموردين
+                    </button>
+                    <button class="btn btn-sm btn-outline-primary" onclick="filterAccounts('all')">
+                        <i class="fas fa-list me-1"></i>
+                        عرض الكل
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let entryCounter = 0;
+let allAccounts = {{ all_accounts_json|tojson }};
+
+$(document).ready(function() {
+    // Set today's date as default
+    const today = new Date().toISOString().split('T')[0];
+    $('#transactionDate').val(today);
+    
+    // Add initial entry
+    addJournalEntry();
+    
+    // Event handlers
+    $('#transactionDate').change(function() {
+        updateSaveButton();
+        loadBalanceSummary();
+    });
+    
+    $('#addEntryBtn').click(addJournalEntry);
+    $('#clearAllBtn').click(clearAllEntries);
+    $('#saveAllBtn').click(saveAllEntries);
+    
+    // Load initial balance summary
+    loadBalanceSummary();
+});
+
+function addJournalEntry() {
+    entryCounter++;
+    
+    const entryHtml = `
+        <div class="card mb-3 journal-entry" data-entry="${entryCounter}">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h6 class="mb-0">
+                    <i class="fas fa-edit me-2"></i>
+                    قيد رقم ${entryCounter}
+                </h6>
+                <div>
+                    <span class="badge entry-balance" data-entry="${entryCounter}">0.00</span>
+                    <button type="button" class="btn btn-sm btn-outline-danger ms-2" 
+                            onclick="deleteEntry(${entryCounter})" ${entryCounter === 1 ? 'disabled' : ''}>
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th width="40%">الحساب</th>
+                                <th width="25%">المبلغ (د.أ)</th>
+                                <th width="20%">النوع</th>
+                                <th width="15%">العمليات</th>
+                            </tr>
+                        </thead>
+                        <tbody data-entry="${entryCounter}">
+                            <!-- Account rows will be added here -->
+                        </tbody>
+                    </table>
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-primary" 
+                        onclick="addAccountRow(${entryCounter})">
+                    <i class="fas fa-plus me-1"></i>
+                    إضافة حساب
+                </button>
+            </div>
+        </div>
+    `;
+    
+    $('#journalEntriesContainer').append(entryHtml);
+    
+    // Add initial account rows (minimum 2 for double entry)
+    addAccountRow(entryCounter);
+    addAccountRow(entryCounter);
+    
+    updateTotalEntries();
+    updateSaveButton();
+}
+
+function addAccountRow(entryId) {
+    const accountOptions = allAccounts.map(acc => 
+        `<option value="${acc.id}" data-type="${acc.type}">${acc.name} (${acc.type})</option>`
+    ).join('');
+    
+    const rowId = Date.now() + Math.random();
+    
+    const rowHtml = `
+        <tr data-row="${rowId}" data-entry="${entryId}">
+            <td>
+                <select class="form-select form-select-sm account-select" 
+                        data-row="${rowId}" data-entry="${entryId}">
+                    <option value="">اختر الحساب</option>
+                    ${accountOptions}
+                </select>
+            </td>
+            <td>
+                <input type="number" class="form-control form-control-sm amount-input" 
+                       placeholder="0.00" step="0.01" 
+                       data-row="${rowId}" data-entry="${entryId}">
+            </td>
+            <td>
+                <span class="badge transaction-type" data-row="${rowId}">-</span>
+            </td>
+            <td>
+                <button type="button" class="btn btn-sm btn-outline-danger" 
+                        onclick="deleteAccountRow('${rowId}')">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </td>
+        </tr>
+    `;
+    
+    $(`tbody[data-entry="${entryId}"]`).append(rowHtml);
+    
+    // Event handlers for new row
+    $(`input[data-row="${rowId}"]`).on('input', function() {
+        updateTransactionType($(this));
+        calculateEntryBalance(entryId);
+        updateSaveButton();
+    });
+    
+    $(`select[data-row="${rowId}"]`).on('change', function() {
+        updateSaveButton();
+        // Focus on amount field
+        $(`input[data-row="${rowId}"]`).focus();
+    });
+    
+    // Keyboard navigation
+    $(`input[data-row="${rowId}"]`).on('keydown', function(e) {
+        if (e.key === 'Tab' || e.key === 'Enter') {
+            e.preventDefault();
+            // Check if this is the last row in the entry
+            const currentRow = $(this).closest('tr');
+            const nextRow = currentRow.next('tr');
+            
+            if (nextRow.length === 0) {
+                // Add new row if this is the last one and has values
+                if ($(this).val() && currentRow.find('.account-select').val()) {
+                    addAccountRow(entryId);
+                    setTimeout(() => {
+                        $(`tbody[data-entry="${entryId}"] tr:last .account-select`).focus();
+                    }, 100);
+                }
+            } else {
+                nextRow.find('.account-select').focus();
+            }
+        }
+    });
+    
+    $(`select[data-row="${rowId}"]`).on('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            $(`input[data-row="${rowId}"]`).focus();
+        }
+    });
+}
+
+function deleteAccountRow(rowId) {
+    const row = $(`tr[data-row="${rowId}"]`);
+    const entryId = row.data('entry');
+    row.remove();
+    
+    // Ensure minimum 2 rows per entry
+    const remainingRows = $(`tbody[data-entry="${entryId}"] tr`).length;
+    if (remainingRows < 2) {
+        addAccountRow(entryId);
+    }
+    
+    calculateEntryBalance(entryId);
+    updateSaveButton();
+}
+
+function deleteEntry(entryId) {
+    if (confirm('هل أنت متأكد من حذف هذا القيد؟')) {
+        $(`.journal-entry[data-entry="${entryId}"]`).remove();
+        
+        // Ensure at least one entry exists
+        if ($('.journal-entry').length === 0) {
+            addJournalEntry();
+        }
+        
+        updateTotalEntries();
+        updateSaveButton();
+    }
+}
+
+function clearAllEntries() {
+    if (confirm('هل أنت متأكد من مسح جميع القيود؟')) {
+        $('#journalEntriesContainer').empty();
+        entryCounter = 0;
+        addJournalEntry();
+    }
+}
+
+function updateTransactionType($amountInput) {
+    const rowId = $amountInput.data('row');
+    const amount = parseFloat($amountInput.val()) || 0;
+    const $badge = $(`.transaction-type[data-row="${rowId}"]`);
+    
+    if (amount === 0) {
+        $badge.removeClass('bg-success bg-danger').addClass('bg-secondary').text('-');
+    } else if (amount > 0) {
+        $badge.removeClass('bg-danger bg-secondary').addClass('bg-success').text('دائن');
+    } else {
+        $badge.removeClass('bg-success bg-secondary').addClass('bg-danger').text('مدين');
+    }
+}
+
+function calculateEntryBalance(entryId) {
+    let balance = 0;
+    
+    $(`tbody[data-entry="${entryId}"] .amount-input`).each(function() {
+        const amount = parseFloat($(this).val()) || 0;
+        balance += amount;
+    });
+    
+    const $badge = $(`.entry-balance[data-entry="${entryId}"]`);
+    $badge.text(balance.toFixed(2));
+    
+    // Color coding
+    if (Math.abs(balance) < 0.01) {
+        $badge.removeClass('bg-warning bg-danger').addClass('bg-success');
+    } else {
+        $badge.removeClass('bg-success bg-danger').addClass('bg-warning');
+    }
+}
+
+function updateTotalEntries() {
+    const totalEntries = $('.journal-entry').length;
+    $('#totalEntries').text(`${totalEntries} قيد`);
+}
+
+function updateSaveButton() {
+    const dateSelected = $('#transactionDate').val() !== '';
+    let hasValidEntries = false;
+    let allEntriesBalanced = true;
+    
+    $('.journal-entry').each(function() {
+        const entryId = $(this).data('entry');
+        let entryBalance = 0;
+        let hasAccounts = false;
+        
+        $(`tbody[data-entry="${entryId}"] tr`).each(function() {
+            const amount = parseFloat($(this).find('.amount-input').val()) || 0;
+            const account = $(this).find('.account-select').val();
+            
+            if (account && Math.abs(amount) > 0.01) {
+                hasAccounts = true;
+                entryBalance += amount;
+            }
+        });
+        
+        if (hasAccounts) {
+            hasValidEntries = true;
+            if (Math.abs(entryBalance) > 0.01) {
+                allEntriesBalanced = false;
+            }
+        }
+        
+        calculateEntryBalance(entryId);
+    });
+    
+    $('#saveAllBtn').prop('disabled', !(dateSelected && hasValidEntries && allEntriesBalanced));
+}
+
+function saveAllEntries() {
+    const transactionDate = $('#transactionDate').val();
+    const journalEntries = [];
+    
+    $('.journal-entry').each(function() {
+        const entryId = $(this).data('entry');
+        const accounts = [];
+        
+        $(`tbody[data-entry="${entryId}"] tr`).each(function() {
+            const amount = parseFloat($(this).find('.amount-input').val()) || 0;
+            const accountId = $(this).find('.account-select').val();
+            const accountType = $(this).find('.account-select option:selected').data('type');
+            
+            if (accountId && Math.abs(amount) > 0.01) {
+                accounts.push({
+                    account_id: accountId,
+                    account_type: accountType,
+                    amount: amount
+                });
+            }
+        });
+        
+        if (accounts.length >= 2) {
+            journalEntries.push({ accounts: accounts });
+        }
+    });
+    
+    if (journalEntries.length === 0) {
+        showMessage('لا توجد قيود صالحة للحفظ', 'error');
+        return;
+    }
+    
+    const $saveBtn = $('#saveAllBtn');
+    $saveBtn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-2"></i>جاري الحفظ...');
+    
+    $.ajax({
+        url: '/add_general_journal_entry',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({
+            transaction_date: transactionDate,
+            journal_entries: journalEntries
+        }),
+        success: function(response) {
+            if (response.success) {
+                showMessage(response.message, 'success');
+                clearAllEntries();
+                loadBalanceSummary();
+            } else {
+                showMessage(response.message, 'error');
+            }
+        },
+        error: function() {
+            showMessage('خطأ في الشبكة أثناء حفظ القيود', 'error');
+        },
+        complete: function() {
+            $saveBtn.prop('disabled', false).html('<i class="fas fa-save me-2"></i>حفظ جميع القيود');
+        }
+    });
+}
+
+function loadBalanceSummary() {
+    // This would load current balances for bank accounts
+    // For now, just show placeholder
+    $('#balanceSummary').html('<small class="text-muted">الأرصدة محدثة</small>');
+}
+
+function filterAccounts(type) {
+    $('.account-select option').each(function() {
+        const optionType = $(this).data('type');
+        if (type === 'all' || optionType === type || $(this).val() === '') {
+            $(this).show();
+        } else {
+            $(this).hide();
+        }
+    });
+}
+
+function showMessage(message, type) {
+    const alertClass = type === 'success' ? 'alert-success' : 
+                      type === 'warning' ? 'alert-warning' : 'alert-danger';
+    
+    const alertHtml = `
+        <div class="alert ${alertClass} alert-dismissible fade show" role="alert">
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    `;
+    
+    $('.container').prepend(alertHtml);
+    
+    // Auto-dismiss after 5 seconds
+    setTimeout(() => {
+        $('.alert').alert('close');
+    }, 5000);
+}
+
+// Initialize everything when page loads
+$(document).ready(function() {
+    updateSaveButton();
+});
+</script>
+
+<style>
+.journal-entry {
+    border-left: 4px solid #007bff;
+}
+
+.entry-balance {
+    font-weight: bold;
+    min-width: 60px;
+    display: inline-block;
+    text-align: center;
+}
+
+.transaction-type {
+    min-width: 50px;
+    display: inline-block;
+    text-align: center;
+}
+
+.table-sm th,
+.table-sm td {
+    padding: 0.5rem 0.25rem;
+}
+
+.form-select-sm,
+.form-control-sm {
+    font-size: 0.875rem;
+}
+</style>
+{% endblock %}

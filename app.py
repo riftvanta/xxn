@@ -53,6 +53,14 @@ class CorrespondingAccount(db.Model):
     def __repr__(self):
         return f'<CorrespondingAccount {self.name}>'
 
+class GeneralJournalEntry(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    transaction_date = db.Column(db.Date, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def __repr__(self):
+        return f'<GeneralJournalEntry {self.id} on {self.transaction_date}>'
+
 class Transaction(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     bank_account_id = db.Column(db.Integer, db.ForeignKey('bank_account.id'), nullable=False)
@@ -62,9 +70,11 @@ class Transaction(db.Model):
     transaction_date = db.Column(db.Date, nullable=False)
     notes = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    journal_entry_id = db.Column(db.Integer, db.ForeignKey('general_journal_entry.id'), nullable=True)
     
     bank_account = db.relationship('BankAccount', backref=db.backref('transactions', lazy=True))
     corresponding_account = db.relationship('CorrespondingAccount', backref=db.backref('transactions', lazy=True))
+    journal_entry = db.relationship('GeneralJournalEntry', backref=db.backref('transactions', lazy=True))
     
     def __repr__(self):
         return f'<Transaction {self.amount} {self.transaction_type}>'
@@ -284,6 +294,133 @@ def get_account_balance(account_id):
         'balance': float(account.current_balance),
         'name': account.name
     })
+
+@app.route('/general_journal')
+def general_journal():
+    bank_accounts = BankAccount.query.all()
+    corresponding_accounts = CorrespondingAccount.query.all()
+    
+    # Combine all accounts for the dropdown
+    all_accounts = []
+    
+    # Add bank accounts
+    for account in bank_accounts:
+        all_accounts.append({
+            'id': f'bank_{account.id}',
+            'name': account.name,
+            'type': 'bank',
+            'balance': float(account.current_balance)
+        })
+    
+    # Add corresponding accounts
+    for account in corresponding_accounts:
+        all_accounts.append({
+            'id': f'corresponding_{account.id}',
+            'name': account.name,
+            'type': account.type,
+            'balance': 0  # We don't track balance for corresponding accounts
+        })
+    
+    return render_template('general_journal.html',
+                         all_accounts=all_accounts,
+                         all_accounts_json=all_accounts)
+
+@app.route('/add_general_journal_entry', methods=['POST'])
+def add_general_journal_entry():
+    try:
+        data = request.get_json()
+        transaction_date = datetime.strptime(data['transaction_date'], '%Y-%m-%d').date()
+        journal_entries = data['journal_entries']
+        
+        if not journal_entries:
+            return jsonify({
+                'success': False,
+                'message': 'لا توجد قيود للحفظ'
+            })
+        
+        saved_entries = 0
+        errors = []
+        
+        for entry_index, entry_data in enumerate(journal_entries):
+            try:
+                accounts_data = entry_data['accounts']
+                
+                # Validate that entry balances
+                total_balance = sum(float(acc['amount']) for acc in accounts_data)
+                if abs(total_balance) > 0.01:  # Allow small rounding differences
+                    errors.append(f'القيد {entry_index + 1}: القيد غير متوازن (المجموع: {total_balance:.2f})')
+                    continue
+                
+                # Create journal entry
+                journal_entry = GeneralJournalEntry(transaction_date=transaction_date)
+                db.session.add(journal_entry)
+                db.session.flush()  # Get the ID
+                
+                # Process each account in this entry
+                for acc_data in accounts_data:
+                    amount = float(acc_data['amount'])
+                    if abs(amount) < 0.01:  # Skip zero amounts
+                        continue
+                        
+                    account_id = acc_data['account_id']
+                    account_type = acc_data['account_type']
+                    
+                    # Parse account ID
+                    if account_type == 'bank':
+                        bank_account_id = int(account_id.replace('bank_', ''))
+                        corresponding_account_id = None
+                        
+                        # Update bank account balance
+                        bank_account = BankAccount.query.get(bank_account_id)
+                        bank_account.current_balance += Decimal(str(amount))
+                        
+                    else:
+                        bank_account_id = None
+                        corresponding_account_id = int(account_id.replace('corresponding_', ''))
+                    
+                    # Determine transaction type
+                    transaction_type = 'credit' if amount > 0 else 'debit'
+                    
+                    # Create transaction record
+                    transaction = Transaction(
+                        bank_account_id=bank_account_id,
+                        corresponding_account_id=corresponding_account_id,
+                        amount=Decimal(str(abs(amount))),
+                        transaction_type=transaction_type,
+                        transaction_date=transaction_date,
+                        notes='',
+                        journal_entry_id=journal_entry.id
+                    )
+                    
+                    db.session.add(transaction)
+                
+                saved_entries += 1
+                
+            except Exception as e:
+                errors.append(f'القيد {entry_index + 1}: {str(e)}')
+        
+        if saved_entries > 0:
+            db.session.commit()
+            
+        if errors:
+            return jsonify({
+                'success': True,
+                'message': f'تم حفظ {saved_entries} قيد بنجاح. أخطاء: {"; ".join(errors)}',
+                'saved_count': saved_entries
+            })
+        else:
+            return jsonify({
+                'success': True,
+                'message': f'تم حفظ {saved_entries} قيد بنجاح',
+                'saved_count': saved_entries
+            })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'message': f'خطأ في حفظ القيود: {str(e)}'
+        })
 
 @app.route('/system_info')
 def system_info():
